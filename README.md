@@ -55,9 +55,11 @@ cd BirdCLEF-2025
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
+# IMPORTANT: Install dependencies from requirements.txt
 pip install -r requirements.txt
 ```
+
+> **Note:** You must install all dependencies using `pip install -r requirements.txt` after activating the virtual environment before running any code.
 
 ### Data Setup
 

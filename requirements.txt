@@ -1,0 +1,9 @@
+opencv-python #cv2
+numpy
+pandas
+librosa
+torch
+timm
+tqdm
+torchvision
+ipykernel

@@ -29,7 +29,7 @@ Our solution builds upon a modified baseline that achieved strong results in pre
     └── baseline.ipynb
 ```
 
-After running the download script, the data folder will contain:
+After running the download script (./download_data.sh), the data folder will contain:
 
 ```
 data/birdclef-2025/
@@ -48,7 +48,7 @@ data/birdclef-2025/
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/BirdCLEF-2025.git
+git clone https://github.com/VajinderKaur/BirdCLEF-2025.git
 cd BirdCLEF-2025
 
 # Create and activate a virtual environment
@@ -68,7 +68,7 @@ We provide a script to automatically download the competition data from Kaggle:
 pip install kaggle
 
 # Run the download script
-bash download_data.sh
+./download_data.sh
 ```
 
 **Prerequisites:**

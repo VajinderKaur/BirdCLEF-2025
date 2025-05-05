@@ -1,25 +1,79 @@
 ---
 title: "Final Report"
 format: html
-jupyter: false
 execute:
   isolated: false
   echo: true
   eval: true
-  output: true
   warning: true
   message: true
 ---
-```{r}
+
+```{r setup}
+# First, check if required packages are installed and install if needed
+required_packages <- c("reticulate", "knitr", "rmarkdown")
+new_packages <- required_packages[!required_packages %in% installed.packages()[,"Package"]]
+if(length(new_packages)) install.packages(new_packages)
+
+# Load reticulate
 library(reticulate)
-use_virtualenv("r-reticulate", required = TRUE)
-py_install(c("torch", "pandas", "numpy", "librosa", "opencv-python-headless", "soundfile", "llvmlite", "numba", "scipy"))
+
+# Error handling for Python environment setup
+tryCatch({
+  # Check if virtualenv exists and create if needed
+  if (!virtualenv_exists("r-reticulate")) {
+    message("Creating virtual environment 'r-reticulate'...")
+    virtualenv_create("r-reticulate")
+  }
+  
+  # Use the environment but don't require it
+  use_virtualenv("r-reticulate", required = FALSE)
+  
+  # Install packages with pip and error handling
+  message("Installing required Python packages...")
+  py_install(c("pandas", "numpy", "scipy", "matplotlib"), pip = TRUE)
+  
+  # Install packages one by one to better handle errors
+  tryCatch(py_install("torch", pip = TRUE),
+           error = function(e) message("Error installing torch: ", e$message))
+  
+  tryCatch(py_install("librosa", pip = TRUE),
+           error = function(e) message("Error installing librosa: ", e$message))
+  
+  tryCatch(py_install("opencv-python-headless", pip = TRUE),
+           error = function(e) message("Error installing opencv: ", e$message))
+  
+}, error = function(e) {
+  message("Error setting up Python environment: ", e$message)
+  message("Will try to continue with existing setup.")
+})
+
+# Print Python configuration for debugging
+cat("Python configuration:\n")
+py_config()
 ```
 
-toc: true
-number-sections: true
+```{python}
+# Diagnostic imports - see what's available
+import sys
+import os
 
-## 🧾 Executive Summary
+# Print Python environment info
+print(f"Python version: {sys.version}")
+print(f"Python executable: {sys.executable}")
+
+# Try importing each dependency individually with error handling
+libraries = ["pandas", "numpy", "torch", "matplotlib"]
+for lib in libraries:
+    try:
+        __import__(lib)
+        print(f"Successfully imported {lib}")
+    except Exception as e:
+        print(f"Failed to import {lib}: {e}")
+```
+
+
+## Executive Summary
 
 This report documents our local inference pipeline for the BirdCLEF 2025 challenge, focused on detecting bird species from soundscape audio. It is based on a high-performing Kaggle notebook with several enhancements.
 
@@ -43,17 +97,9 @@ Key components of this report include:
 - Summary of detected species and confidence thresholds
 
 
-
-execute:
-  echo: true
-  eval: true
-  output: true
-  warning: true
-  message: true
-
 ## **Note : We are using a public notebook as a baseline with some edits of our own to improve the accuracy. This file contains additional edits.[¶](https://www.kaggle.com/code/vajinderkaurmssp/bird25-onlyinf-v2-s-focallossbce-cv-962-lb-829?scriptVersionId=237300174#Note-:-We-are-using-a-public-notebook-as-a-baseline-with-some-edits-of-our-own-to-improve-the-accuracy.-This-file-contains-additional-edits.)**
 
-### **ℹ️INFO**
+### **INFO**
 
 -   This notebook is an inference notebook.
 
@@ -65,7 +111,7 @@ execute:
 
     -   \[INF\] <https://www.kaggle.com/code/kadircandrisolu/efficientnet-b0-pytorch-inference-birdclef-25>
 
-### **ℹ️2025/04/28 MyLocalTrainResult**
+### **2025/04/28 MyLocalTrainResult**
 
 -   trained using FocalLossBCE, which was used in the previous competition, BirdCLEF 2024 8th place solution. The results were good.
 
@@ -92,6 +138,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import types
 import librosa
 import torch
 import torch.nn.functional as F
@@ -155,16 +202,16 @@ def get_criterion(cfg):
 In \[3\]:
 
 
-## 🗂️ Visual Index
+##️ Visual Index
 
-- ⚙️ [Configuration Setup](#configuration-setup)
-- 🧬 [Taxonomy Overview](#taxonomy-overview)
-- 📊 [Taxonomy Visualization](#taxonomy-visualization)
-- 🎧 [Audio Preprocessing](#audio-preprocessing)
-- 🧠 [Model Definition](#model-definition)
-- 🌈 [Spectrogram Visualization](#spectrogram-visualization)
-- ✅ [Final Output Summary](#final-output-summary)
-- 🧾 [Conclusion](#conclusion)
+- [Configuration Setup](#configuration-setup)
+- Taxonomy Overview](#taxonomy-overview)
+- [Taxonomy Visualization](#taxonomy-visualization)
+- [Audio Preprocessing](#audio-preprocessing)
+- [Model Definition](#model-definition)
+- [Spectrogram Visualization](#spectrogram-visualization)
+- [Final Output Summary](#final-output-summary)
+- [Conclusion](#conclusion)
 
 ## ⚙️ Configuration Setup
 
@@ -191,35 +238,28 @@ class CFG:
     FS = 32000  
     WINDOW_SIZE = 5
 
-    # Model Definition
-    model_path = '/kaggle/input/pub-bird25-b-422-ppv15-v2-s-focallossbce'
+    # Model info
     model_name = 'tf_efficientnetv2_s.in21k_ft_in1k'
     use_specific_folds = False
     folds = [0,1,2,3]
     in_channels = 1
     device = 'cpu'
 
-    # File paths
+    # File paths - adjust these to your local setup
     test_soundscapes = "/Users/reesemullen/Desktop/BU Work/MA 679/BirdCLEF-2025/birdclef-2025-data/test_soundscapes"
     submission_csv = "/Users/reesemullen/Desktop/BU Work/MA 679/BirdCLEF-2025/birdclef-2025-data/sample_submission.csv"
     taxonomy_csv = "/Users/reesemullen/Desktop/BU Work/MA 679/BirdCLEF-2025/birdclef-2025-data/taxonomy.csv"
 
-    # Inference
+    # Inference params
     batch_size = 16
     use_tta = False
     tta_count = 3
     threshold = 0.5
-
-    # Debug
     debug = False
     debug_count = 3
 
 cfg = CFG()
 cfg.RANDOM_SEGMENT = True
-
-print(cfg.device)
-print(cfg.taxonomy_csv)
-
 ```
 
 
@@ -227,28 +267,46 @@ In \[4\]:
 
 
 ```
-## 📊 Data Summary: Taxonomy
+## Data Summary: Taxonomy
 
 ```{python eval=TRUE, context='global'}
-
-
-print(f"Using device: {cfg.device}")
-print(f"Loading taxonomy data...")
-taxonomy_df = pd.read_csv(cfg.taxonomy_csv)
-species_ids = taxonomy_df['primary_label'].tolist()
-num_classes = len(species_ids)
-print(f"Number of classes: {num_classes}")
-
-# Summary of the taxonomy dataframe
-
-print("Taxonomy Shape:", taxonomy_df.shape)
-print("Unique species:", taxonomy_df['primary_label'].nunique())
-print("\nTaxonomy Summary:")
-taxonomy_df.describe(include='all')
+# Load taxonomy data if file exists
+try:
+    if os.path.exists(cfg.taxonomy_csv):
+        taxonomy_df = pd.read_csv(cfg.taxonomy_csv)
+        species_ids = taxonomy_df['primary_label'].tolist()
+        num_classes = len(species_ids)
+        print(f"Number of classes: {num_classes}")
+        
+        # Summary of the taxonomy dataframe
+        print("Taxonomy Shape:", taxonomy_df.shape)
+        print("Unique species:", taxonomy_df['primary_label'].nunique())
+        
+        # Display class distribution if available
+        if 'class_name' in taxonomy_df.columns:
+            plt.figure(figsize=(10, 6))
+            taxonomy_df['class_name'].value_counts().plot(kind='bar', color='teal')
+            plt.title("Species Counts by Class")
+            plt.ylabel("Count")
+            plt.xlabel("Class")
+            plt.tight_layout()
+            plt.savefig('species_by_class.png')
+            plt.close()
+            print("Created species distribution chart")
+    else:
+        print(f"Taxonomy file not found at {cfg.taxonomy_csv}")
+        # Create dummy data for demonstration
+        species_ids = [f'species_{i}' for i in range(20)]
+        num_classes = len(species_ids)
+except Exception as e:
+    print(f"Error loading taxonomy: {e}")
+    # Create dummy data
+    species_ids = [f'species_{i}' for i in range(20)]
+    num_classes = len(species_ids)
 ```
 
 
-## 📚 Visual: Species Count by Class
+## Visual: Species Count by Class
 
 
 This bar chart visualizes the number of species per biological class in the dataset. Uneven class distributions may affect model confidence and prediction tendencies. For example, if one class dominates, the model might be biased toward it unless handled with proper balancing during training.
@@ -285,9 +343,8 @@ Number of classes: 206
 In \[5\]:
 
 ```{python eval=TRUE, context='global'}
-## 🧠 Model Definition
+## Model Definition
 
-```{python eval=TRUE, context='global'}
 class BirdCLEFModel(nn.Module):
     def __init__(self, cfg, num_classes):
         super().__init__()
@@ -322,8 +379,8 @@ class BirdCLEFModel(nn.Module):
 
 In \[6\]:
 
-```{python eval=TRUE, context='global'}
-## 🎧 Audio Preprocessing
+
+## Audio Preprocessing
 
 ```{python eval=TRUE, context='global'}
 def audio2melspec(audio_data, cfg):
@@ -351,6 +408,7 @@ def audio2melspec(audio_data, cfg):
     mel_spec_norm = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min() + 1e-8)
     
     return mel_spec_norm
+```
 
 ```{python context='global'}
 import numpy as np
@@ -481,6 +539,7 @@ def load_models(cfg, num_classes):
             print(f"Error loading model {model_path}: {e}")
     
     return models
+```
 
 ```{python eval=TRUE, context='global'}
 def predict_on_spectrogram(audio_path, models, cfg, species_ids):
@@ -708,7 +767,7 @@ main()
 
 
 
-## 📊 Post-Inference Summary and Visuals
+## Post-Inference Summary and Visuals
 ```{python eval=TRUE, context='global'}
 import os
 import pandas as pd
@@ -862,7 +921,7 @@ In \[4\]:
 
 
 
-## 📈 Visual: Top 10 Most Frequent Species
+## Visual: Top 10 Most Frequent Species
 
 ```{python eval=TRUE, context='global'}
 import matplotlib.pyplot as plt
@@ -995,7 +1054,7 @@ for group in np.unique(groups):
 sub.to_csv("submission.csv", index=False)
 ```
 
-## 📊 Post-Prediction Summary and Visualization
+## Post-Prediction Summary and Visualization
 
 ```{python eval=TRUE, context='global'}
 from IPython.display import display
@@ -1039,7 +1098,7 @@ if os.path.exists("submission.csv"):
     plt.tight_layout()
     plt.show()
     
-    # ==== 🔥 Heatmap for One Soundscape (Optional) ====
+    # ====  Heatmap for One Soundscape (Optional) ====
     submission['soundscape'] = submission['row_id'].str.rsplit('_', n=1).str[0]
     first_soundscape = submission['soundscape'].unique()[0]
     subset = submission[submission['soundscape'] == first_soundscape]
@@ -1059,7 +1118,7 @@ else:
 ```
 
 
-## 📝 Conclusion
+## Conclusion
 
 In this inference report, we detailed the steps for processing raw audio, applying our trained CNN model, and interpreting results. Future improvements could include:
 
@@ -1070,7 +1129,7 @@ In this inference report, we detailed the steps for processing raw audio, applyi
 This pipeline provides a repeatable framework for large-scale soundscape inference in BirdCLEF and beyond.
 
 
-## 📊 Example Spectrogram
+## Spectrogram
 
 ```{python eval=TRUE, context='global'}
 plt.imshow(mel_spec, cmap='viridis')
@@ -1079,7 +1138,7 @@ plt.colorbar()
 plt.show()
 ```
 
-## ✅ Final Output Summary
+## Final Output Summary
 
 This section gives a quick overview of the submission file generated from model predictions.
 
@@ -1104,7 +1163,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-## 📊 Taxonomy Visualization
+## Taxonomy Visualization
 
 This plot shows how many species belong to each major bird class.
 
@@ -1123,7 +1182,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-## 🌈 Spectrogram Visualization
+## Spectrogram Visualization
 
 This section shows an example mel spectrogram for a single audio segment.
 
@@ -1142,7 +1201,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-## 🧾 Conclusion
+## Conclusion
 
 This report outlined the BirdCLEF 2025 inference pipeline, including configuration settings, preprocessing steps, model architecture, taxonomy insights, and final output analysis.
 

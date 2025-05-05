@@ -1,6 +1,6 @@
 # BirdCLEF+ 2025 - Species Identification from Audio
 
-![BirdCLEF+ 2025 Header](./assets/header.png)
+<img src="./assets/header.png" width="100%" alt="BirdCLEF+ 2025 Header">
 
 This repository contains the work of Team MSSP PVTR for the [BirdCLEF+ 2025](https://kaggle.com/competitions/birdclef-2025) Kaggle competition, focused on species identification from audio recordings of birds, amphibians, mammals, and insects from the Middle Magdalena Valley of Colombia.
 

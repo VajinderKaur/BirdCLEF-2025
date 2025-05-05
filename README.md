@@ -18,6 +18,7 @@ Our solution builds upon a modified baseline that achieved strong results in pre
 
 ```
 .
+├── data/
 ├── assets
 │   └── header.png
 ├── download_data.sh

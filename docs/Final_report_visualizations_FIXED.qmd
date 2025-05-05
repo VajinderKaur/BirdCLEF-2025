@@ -5,7 +5,7 @@ author:
   - name: "Vajinder Kaur"
   - name: "Taha Ababou"
   - name: "Paul Moon"
-format: html
+format: pdf
 execute:
   isolated: false
   echo: true
@@ -319,15 +319,6 @@ plt.xlabel("Class")
 plt.tight_layout()
 plt.show()
 ```
-
-## Visual: Top 10 Species by Average Model Confidence
-
-The visualizations below provide insight into the model’s behavior during inference:
-
-- **Top 10 Species by Average Confidence**: This chart shows which species the model is most confident about across all predictions. High average confidence may indicate the species has distinctive acoustic features or more training examples.
-- **Caution on High Confidence**: High average confidence does not always mean high accuracy. Some false positives may have strong confidence scores if background noise resembles a bird call.
-- **Role of Thresholding**: The threshold (e.g., 0.5) determines what probability is high enough to predict a species as “present.” Adjusting this value affects precision and recall trade-offs.
-
          
 In \[5\]:
 
@@ -827,7 +818,6 @@ def main():
     
     end_time = time.time()
     print(f"Inference completed in {(end_time - start_time)/60:.2f} minutes")
-main()
 ```
 
 In \[10\]:
@@ -838,6 +828,14 @@ if __name__ == "__main__":
 ```
 
 ## Post-Inference Summary and Visuals
+## Visual: Top 10 Species by Average Model Confidence
+
+The visualizations below provide insight into the model’s behavior during inference:
+
+- **Top 10 Species by Average Confidence**: This chart shows which species the model is most confident about across all predictions. High average confidence may indicate the species has distinctive acoustic features or more training examples.
+- **Caution on High Confidence**: High average confidence does not always mean high accuracy. Some false positives may have strong confidence scores if background noise resembles a bird call.
+- **Role of Thresholding**: The threshold (e.g., 0.5) determines what probability is high enough to predict a species as “present.” Adjusting this value affects precision and recall trade-offs.
+
 ```{python eval=TRUE, context='global'}
 import os
 import pandas as pd
@@ -877,18 +875,17 @@ for group in np.unique(groups):
 sub.to_csv("submission.csv", index=False)
 ```
 
-## Data Summary: Taxonomy
-
 ## Visual: Top 10 Most Frequent Species
-
+#Most Commonly Labeled Species in Training Set
+This horizontal bar chart displays the 10 most frequent species in the training taxonomy file (taxonomy_df). These species (e.g., rebbla1, paltan1, pirfly1) appear most often across the dataset and may therefore have a greater influence during training. If these high-frequency species are also commonly predicted in the model outputs, it may reflect either true abundance or class imbalance bias — a common challenge in ecological classification tasks.
 ```{python eval=TRUE, context='global'}
 import matplotlib.pyplot as plt
 
 # Plotting top 10 most frequent species
 plt.figure(figsize=(10, 6))
-taxonomy_df['primary_label'].value_counts().head(10).plot(kind='barh', color='skyblue')
+taxonomy_df['primary_label'].value_counts(normalize=True).head(10).plot(kind='barh', color='skyblue')
 plt.title("Top 10 Most Frequent Species in Taxonomy", fontsize=14)
-plt.xlabel("Count")
+plt.xlabel("Proportion")
 plt.ylabel("Species")
 plt.gca().invert_yaxis()  # most frequent on top
 plt.tight_layout()
@@ -924,10 +921,35 @@ def main():
     start_time = time.time()
     print("Starting BirdCLEF-2025 inference...")
     print(f"TTA enabled: {cfg.use_tta} (variations: {cfg.tta_count if cfg.use_tta else 0})")
-main()
 ```         
 
+```{python eval = FALSE, context = 'global'}
+if __name__ == "__main__":
+    main()
+```
+Starting BirdCLEF-2025 inference...
+TTA enabled: False (variations: 0)
+Found a total of 4 model files.
+Loading model: /kaggle/input/pub-bird25-b-422-ppv15-v2-s-focallossbce/model_0.9626.pth
+Loading model: /kaggle/input/pub-bird25-b-422-ppv15-v2-s-focallossbce/model_0.9652.pth
+Loading model: /kaggle/input/pub-bird25-b-422-ppv15-v2-s-focallossbce/model_0.9607.pth
+Loading model: /kaggle/input/pub-bird25-b-422-ppv15-v2-s-focallossbce/model_0.9605.pth
+Model usage: Ensemble of 4 models
+Found 0 test soundscapes
+ 0/0 [00:00<?, ?it/s]
+Creating submission dataframe...
+Submission saved to submission.csv
+Inference completed in 0.05 minutes
 
+
+#Species Prediction Count per Segment
+This histogram displays how many different species were predicted as present in each 5-second audio segment using a confidence threshold of 0.5. Most segments had between 9 and 13 species predicted, suggesting the model is detecting multiple species per segment rather than focusing on a single dominant one. This aligns with expectations for dense tropical soundscapes but may indicate the need for more aggressive thresholding or post-processing to reduce potential false positives.
+
+#Most Commonly Detected Species
+The bar chart shows the 15 species most frequently predicted with >0.5 confidence across all segments. These species (e.g., species_3, species_9) appeared in 50+ segments each, which could reflect either their actual abundance or model bias toward more confidently detectable vocal patterns. Reviewing these predictions alongside known species distributions or background sound patterns would help interpret whether these are overconfident false positives or genuine frequent detections.
+
+#Temporal Prediction Heatmap
+This heatmap visualizes model confidence scores over time for one soundscape ({first_soundscape}), showing species on the y-axis and time segments on the x-axis. Brighter colors indicate higher predicted probability. The map reveals patterns of temporal activity — for example, certain species have consistently higher confidence at specific times, suggesting repeated calls or overlapping vocalizations. This kind of visualization can guide audio inspection and support label verification or manual review.
 ```{python eval=TRUE, context='global'}
 from IPython.display import display
 import os
@@ -956,6 +978,8 @@ if os.path.exists("submission.csv"):
     plt.ylabel("Frequency")
     plt.grid(True)
     plt.tight_layout()
+    plt.axvline(submission['positive_preds'].median(), color='red', linestyle='--', label='Median')
+    plt.legend()
     plt.show()
     
     # ==== Top 15 Most Frequently Predicted Species ====
@@ -976,7 +1000,7 @@ if os.path.exists("submission.csv"):
     subset = submission[submission['soundscape'] == first_soundscape]
     
     heatmap_data = subset[species_cols].T
-    heatmap_data.columns = [f"{i*5}s" for i in range(heatmap_data.shape[1])]
+    heatmap_data.columns = [f"{i*5}-{(i+1)*5}s" for i in range(heatmap_data.shape[1])]
     
     plt.figure(figsize=(14, 8))
     sns.heatmap(heatmap_data, cmap="viridis", cbar_kws={'label': 'Confidence'})
@@ -989,11 +1013,20 @@ else:
     print("submission.csv not found. Run inference first.")
 ```
 ### Distribution of Mean Predicted Probabilities
+Model Prediction Confidence
+The histogram below illustrates the mean predicted probability per sample, averaged across all species in the submission. Most values are clustered between 0.45 and 0.55, indicating that the model is generally cautious in its predictions and tends to distribute probability mass across multiple species rather than assigning high confidence to any single one. This conservative behavior may help avoid false positives but could also limit detection power if sharper predictions are needed.
+
 
 ```{python eval = TRUE}
-# Make sure 'submission' DataFrame is already loaded
-numeric_cols = submission.select_dtypes(include=['float', 'int']).columns
-submission_confidences = submission[numeric_cols].mean(axis=1)
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Ensure submission is loaded
+submission = pd.read_csv("submission.csv")
+
+# Drop row_id (or any non-species columns)
+species_cols = submission.columns.drop("row_id")
+submission_confidences = submission[species_cols].mean(axis=1)
 
 plt.figure(figsize=(8, 4))
 plt.hist(submission_confidences, bins=30, edgecolor='black')
@@ -1003,22 +1036,61 @@ plt.ylabel("Count")
 plt.grid(True)
 plt.tight_layout()
 plt.show()
+
+```
+### Distribution of Max Predicted Probabilities
+Model Top Prediction Confidence
+The following histogram displays the maximum predicted probability per sample, representing the model’s confidence in its top choice for each segment. Most maximum probabilities fall between 0.75 and 0.95, suggesting the model typically identifies a leading species with a high degree of certainty. This pattern implies strong discriminative ability and a lower tendency to make indecisive predictions, which can be valuable in high-stakes classification tasks like bird species detection.
+```{python eval = TRUE, context = 'global'}
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load submission file
+submission = pd.read_csv("submission.csv")
+
+# Drop non-species columns
+species_cols = submission.columns.drop("row_id")
+
+# Calculate max predicted probability per sample
+max_confidences = submission[species_cols].max(axis=1)
+
+# Plot histogram
+plt.figure(figsize=(8, 4))
+plt.hist(max_confidences, bins=30, edgecolor='black')
+plt.title("Distribution of Max Predicted Probabilities per Sample")
+plt.xlabel("Max Probability per Sample")
+plt.ylabel("Count")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 ```
 
 
 ## Final Output Summary
 
-This section gives a quick overview of the submission file generated from model predictions.
+This section gives an overview of the submission file generated from model predictions.
 
 ```{python eval=TRUE, context='global'}
-# Load and inspect submission
+# Load and inspect the final submission file
 import pandas as pd
-submission = pd.read_csv(cfg.submission_csv)
 
-print("Submission shape:", submission.shape)
-print(submission.head())
+# Update the path to your actual submission CSV file directly
+submission = pd.read_csv("submission.csv")  # Replace if needed
+
+# Print summary information
+print("Submission file loaded successfully")
+print(f"Shape of submission: {submission.shape[0]} rows × {submission.shape[1]} columns\n")
+
+# Preview the first few rows
+print("🧾 First 5 rows of the submission:")
+display(submission.head())
+
 ```
+# Number of Species Detected per Segment
+This histogram shows how many species were detected per 5-second segment, based on a confidence threshold of 0.5. Most segments have between 9 and 13 species predicted, with a peak around 10. This distribution suggests that the model often predicts multiple species per segment, which is typical in environments with overlapping bird calls. However, the relatively high species counts may also indicate a low threshold or overprediction, and could be fine-tuned to improve precision.
 
+# Most Confidently Predicted Species
+This bar chart ranks the top 25 species by their mean prediction probability across all segments. The highest average confidence belongs to species_3, followed closely by others such as species_9 and species_0, with values mostly ranging between 0.48 and 0.58. These results may reflect either strong signal patterns for these species or model bias introduced during training. If these species also appear frequently in high-confidence detections, this could guide post-processing or priority review for likely presences.
 ```{python, eval = TRUE, context ='global'}
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -1054,15 +1126,19 @@ plt.tight_layout()
 plt.grid(True)
 plt.show()
 ```
- 
+# Most Frequently Predicted Species
+The bar chart above shows the top 10 species based on the total number of times each species exceeded the prediction threshold across all segments. Species like species_3, species_9, and species_0 are most frequently detected, each with over 50 positive predictions. This may reflect their dominance in the acoustic environment or the model’s tendency to favor certain signal profiles.
 ```{python eval=TRUE, context='global'}
 species_positive_counts = submission.iloc[:, 1:].sum().sort_values(ascending=False)
 
 species_positive_counts.head(10).plot(kind='bar', title='Top Predicted Species')
 plt.ylabel("Positive Predictions")
 plt.tight_layout()
+plt.xticks(rotation = 45)
 plt.show()
 ```
+# Segment-Level Prediction Confidence
+This line plot shows the maximum predicted probability for each 5-second audio segment. The values range from approximately 0.65 to 0.97, indicating that for most segments, the model identifies at least one species with reasonably high confidence. The fluctuations suggest varying signal clarity or species detectability across segments. Sharp dips may represent more ambiguous or noisy segments, while spikes reflect segments where the model is highly certain about the presence of a particular species.
 ```{python, eval = TRUE, context = 'global'}
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -1075,6 +1151,8 @@ plt.xlabel("Segment Index")
 plt.ylabel("Max Probability")
 plt.grid(True)
 plt.tight_layout()
+plt.axhline(submission_conf.median(), color='red', linestyle='--', label='Median Confidence')
+plt.legend()
 plt.show()
 ```
 ```{python, eval = TRUE, context = 'global'}
@@ -1086,10 +1164,17 @@ print(summary.head(10))
 
 # Conclusion
 
-In this inference report, we detailed the steps for processing raw audio, applying our trained CNN model, and interpreting results. Future improvements could include:
-- Spectrogram augmentation
-- Post-processing for threshold optimization
-- Real-time inference integration
+The ensemble model’s prediction patterns across the test segments reveal several meaningful behaviors in both confidence distribution and species prioritization, suggesting a model that is both assertive and patterned in its decisions.
+
+The histogram of species detected per segment, peaking around 10–12 detections, reflects a liberal multi-label classification strategy. This behavior aligns with expectations for tropical soundscapes where bird calls often overlap. However, the relatively narrow spread around this peak suggests that the model is applying a fairly uniform decision rule across time, rather than adapting dynamically to sparse or dense acoustic conditions. This might point to a reliance on global thresholds rather than localized signal characteristics.
+
+When examining prediction confidence, the mean predicted probabilities across species per segment are tightly clustered between 0.45 and 0.55. This suggests the model spreads probability mass fairly evenly, indicating low overconfidence but also limited discriminative sharpness. Yet, the maximum predicted probabilities per segment—routinely between 0.75 and 0.95—highlight a decisive selection of a top species, revealing that while the model is cautious overall, it still identifies a primary candidate with conviction in each case. The line plot of these max probabilities shows little flatlining, reinforcing the model’s temporal consistency in confident top-class predictions, despite variation in segment quality.
+
+Species-level plots point to a clear preference for a core subset of species, with species_3, species_9, and species_0 dominating across total detections, high-confidence predictions, and average probabilities. The fact that these same species recur across frequency, confidence, and maximum probability charts indicates that the model either (1) detects them more easily due to acoustic distinctiveness, or (2) over-emphasizes them due to training set imbalance or spectral similarity to common background patterns. Notably, species such as species_12 and species_5 have lower mean probabilities despite appearing frequently, suggesting these are frequently ambiguous or borderline predictions rather than clear detections.
+
+The heatmap of prediction probabilities across time for a representative soundscape further reinforces this insight. Rather than sharply isolated bursts of confidence, the model shows persistent, moderate-to-strong confidence for many species over time. This could indicate sustained background vocalizations, reverberation effects, or model inertia—where once a species is favored, it remains so in adjacent segments.
+
+Taken together, these observations characterize the model as one that is confident in its top predictions, inclusive in its label assignment, and biased toward a small group of dominant species. While this combination may yield good recall in multi-species environments, it may also mask rarer or quieter birds under a cloud of more persistent signals. The behavior appears stable across segments, with only modest variation in per-segment confidence or species count, pointing to a well-regularized but potentially conservative model that favors precision in top ranks while remaining permissive in its broader predictions.
 
 
 
